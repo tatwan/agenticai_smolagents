@@ -37,18 +37,39 @@ This is a 6-module, hands-on mini-course for building AI agents using Hugging Fa
 
 ---
 
+## Quick Start (Colab) <a name="quick-start-colab"></a>
+
+1. Click any **Open in Colab** badge in the Module Map below
+2. In Colab, go to **Secrets** (🔑 icon in the left sidebar) → **Add a new secret**
+   - Name: `HF_TOKEN` · Value: your HuggingFace token
+3. In the notebook, uncomment the **installation cell** (first code cell) and run it:
+   ```python
+   !uv pip install smolagents python-dotenv duckduckgo-search mlflow
+   ```
+4. Uncomment the **Colab Secrets block** in the `## Setup` cell and run it:
+   ```python
+   from google.colab import userdata
+   os.environ['HF_TOKEN'] = userdata.get('HF_TOKEN')
+   ```
+5. Run all remaining cells in order
+
+---
+
+
+
 ## Module Map
 
-| Module | Topic | Key Tools | Est. Time |
+| Module | Topic | Key Tools | Open in Colab |
 |---|---|---|---|
-| 01 | Foundations: The Agent Loop | `CodeAgent`, `InferenceClientModel` | 45–60 min |
-| 02 | Tools & Custom Tools | `@tool`, `Tool` subclass | 60–75 min |
-| 03 | CodeAgent vs ToolCallingAgent | Both agent types, `LiteLLMModel` | 60–75 min |
-| 04 | Web Search & Browsing | `DuckDuckGoSearchTool`, `VisitWebpageTool` | 60–75 min |
-| 05 | Multi-Agent Orchestration | `managed_agents`, manager pattern | 75–90 min |
-| 06 | MLflow Observability | `mlflow`, step tracing, run comparison | 75–90 min |
+| 01 | Foundations: The Agent Loop | `CodeAgent`, `InferenceClientModel` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/01_foundations/notebook.ipynb) |
+| 02 | Tools & Custom Tools | `@tool`, `Tool` subclass | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/02_tools_and_custom_tools/notebook.ipynb) |
+| 03 | CodeAgent vs ToolCallingAgent | Both agent types, `LiteLLMModel` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/03_codeagent_vs_toolcalling/notebook.ipynb) |
+| 04 | Web Search & Browsing | `DuckDuckGoSearchTool`, `VisitWebpageTool` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/04_web_search_and_browsing/notebook.ipynb) |
+| 05 | Multi-Agent Orchestration | `managed_agents`, manager pattern | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/05_multi_agent_orchestration/notebook.ipynb) |
+| 06 | MLflow Observability | `mlflow`, step tracing, run comparison | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/06_mlflow_observability/notebook.ipynb) |
 
-**Total: approximately 6–8 hours**
+
+> **Running in Colab?** Each notebook has a commented-out cell at the top to install dependencies (`!uv pip install ...`) and a section for loading your `HF_TOKEN` via Colab Secrets. See the [Quick Start for Colab](#quick-start-colab) section below.
 
 ---
 
