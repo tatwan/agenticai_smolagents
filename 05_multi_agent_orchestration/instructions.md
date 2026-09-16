@@ -1,80 +1,73 @@
-# Module 05: Multi-Agent Orchestration
+# Module 05: Multi-Agent Orchestration — how to run this lab
 
-## Learning Objectives
+**Module:** 05 of 06  
+**Read first:** [`outline.md`](outline.md)  
+**Then run:** [`notebook.ipynb`](notebook.ipynb)
 
-By the end of this module you will be able to:
+---
 
-1. Build a manager agent that delegates to specialist agents using `managed_agents`
-2. Build specialist agents with focused single responsibilities and clear descriptions
-3. Wire manager and specialists together and run a combined multi-domain task
-4. Inspect `manager.memory.steps` to trace when and how delegation occurred
-5. Apply multi-agent design principles: one-responsibility rule, stateless specialists, description quality, and appropriate `max_steps`
+## Learning objectives
+
+- Build specialists with `name` and `description` on the agent (no `ManagedAgent` wrapper)
+- Pass them to a manager via `managed_agents=`
+- Treat descriptions as the routing table
+- Inspect `manager.memory.steps` and `manager.managed_agents` (a dict)
+- Decide when *not* to use multi-agent
 
 ---
 
 ## Prerequisites
 
-- Module 01: Foundations (agent basics, run loop, memory)
-- Module 02: Tools and Custom Tools (custom `@tool` decorator, `CSVSummaryTool` used in Exercise 2)
-- Module 03: CodeAgent vs ToolCallingAgent (know when to use each agent type)
-- Module 04: Web Search and Browsing (`DuckDuckGoSearchTool`, `VisitWebpageTool` are used in the web_researcher specialist)
+- Modules 01–04
+- `data/sample_sales.csv` in the repo
+- Web specialist may flake (Module 04). The analyst path is local and should still run.
 
 ---
 
-## Estimated Time
+## Estimated time
 
-75–90 minutes
+90–120 minutes
 
 ---
 
-## How to Run
-
-From the repository root, run:
+## How to run
 
 ```bash
 uv run jupyter lab 05_multi_agent_orchestration/notebook.ipynb
 ```
 
-Ensure your `.env` file contains a valid `HF_TOKEN` before starting.
+---
+
+## Common errors
+
+### 1. Manager never calls a specialist
+
+The description did not match the user task, or `name` is missing. Print `manager.managed_agents.keys()`. Rewrite descriptions with “pass X, return Y.”
+
+### 2. `ManagedAgent` import fails
+
+That class is not what current smolagents uses. Put `name=` / `description=` on `CodeAgent` / `ToolCallingAgent`.
+
+### 3. Specialist “forgets” the CSV path
+
+Each call is stateless. The manager must include the path in the task string it sends.
+
+### 4. Web researcher 429 / empty search
+
+Same as Module 04. Use `engine="bing"` or skip the web half and still complete the analyst + manager wiring.
+
+### 5. Analyst invents numbers (e.g. “1000 rows”)
+
+Small local models often skip `csv_summary` and write a plausible report. The **wiring still worked** if `data_analyst` appears in the manager trace. Read `data_analyst.memory.steps`. Switch to the Hub default or a larger Ollama coder if you need the numbers to be true.
+
+### 6. Token / latency blow-up
+
+Lower `max_steps` on specialists. Do not give the manager the same tools the specialists have.
 
 ---
 
-## Common Errors and Fixes
+## Tips
 
-### 1. Manager calls specialist with wrong format
-
-**Symptom**: The manager passes a full paragraph or structured dict instead of a plain research question. The specialist produces an irrelevant or confused result.
-
-**Cause**: The specialist's description does not explicitly tell the manager what format to use for the task string.
-
-**Fix**: Add a sentence to the description that says exactly what to pass, for example: "Provide a specific research question as the task." The manager reads the description as its routing table — format instructions must be in there.
-
----
-
-### 2. Specialist max_steps too low
-
-**Symptom**: The specialist returns an incomplete or empty result. The manager's answer is thin or incorrect.
-
-**Cause**: Web research requires multiple steps — at minimum: search query, visit page, extract information, synthesize. If `max_steps` is set to 2 or 3, the specialist runs out of steps before it can return a useful answer.
-
-**Fix**: Set `max_steps` to at least 5–6 for any specialist that involves web search. Data analysts and formatters can use 2–4 steps.
-
----
-
-### 3. Context window overflow
-
-**Symptom**: An error about token limits, or the manager starts ignoring earlier specialist results.
-
-**Cause**: Specialist results are added to the manager's context window. If a specialist returns a very long response (e.g., a full webpage), the manager's context fills quickly, especially when multiple specialists are called.
-
-**Fix**: Design specialist descriptions to ask for concise summaries, not raw content. For example: "Returns a concise summary with source URLs" signals to the specialist that it should not dump full webpage text into its answer.
-
----
-
-### 4. Manager not delegating
-
-**Symptom**: The manager tries to answer the task from its own training knowledge instead of calling a specialist. The memory steps show no delegation.
-
-**Cause**: The specialist descriptions are too generic. The manager does not recognize that the specialist is the right tool for this task.
-
-**Fix**: Strengthen the specialist descriptions to be specific about what the specialist knows and does. For example, instead of "Helps with web tasks", use "Searches the web and visits pages to retrieve factual, up-to-date information. Provide a specific research question as the task. Returns a concise summary with source URLs." The manager is more likely to delegate when the description clearly maps to the task at hand.
+- One responsibility per specialist.
+- Manager `tools=[]` in the guided example on purpose.
+- After a run: `list(manager.managed_agents)` should be the names you chose.

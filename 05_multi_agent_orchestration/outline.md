@@ -1,101 +1,142 @@
-# Module 05: Multi-Agent Orchestration — Outline
+# Module 05: Multi-Agent Orchestration
 
-## 1. Why Multi-Agent?
+**Read this first**, then run `notebook.ipynb`.
 
-Single agents accumulate tools and responsibilities over time, making them difficult to manage and debug. Multi-agent systems solve this through:
-
-- **Specialization**: Each agent does one job well. A web researcher focuses on retrieval; a data analyst focuses on computation. Neither is asked to do both.
-- **Modularity**: Swap or upgrade a specialist without touching the manager or other specialists. If the web researcher needs a new tool, only that agent changes.
-- **Easier debugging**: When something goes wrong, you can trace which agent failed. A specialist that returned bad data is easier to isolate than a monolithic agent with ten tools.
+**Time:** 90–120 minutes · **Depends on:** Modules 01–04
 
 ---
 
-## 2. The Manager + Managed Agent Pattern
+## 1. What is a multi-agent system?
 
-The core pattern in smolagents multi-agent systems:
+A **single** agent is one loop, one tool bag, one context window.
 
-- The **manager agent** has **no tools** of its own — only a `managed_agents` list.
-- Each **managed agent** (specialist) has a `name` and `description` that the manager uses to decide who to call and with what task.
-- The manager calls a specialist like a tool, passing a **task string** as the argument.
-- The specialist runs its own internal loop and returns a result string.
-- The manager incorporates that result and continues reasoning.
+A **multi-agent** system is several loops, coordinated. The common teaching shape (and the one smolagents implements) is **manager + specialists**:
 
-Key detail: `managed_agents` is a list passed at construction time. The manager cannot add or remove specialists at runtime.
+- The manager sees the user task.
+- It does **not** hold every tool.
+- It calls another agent the way it would call a tool: “you do this subtask,” then reads a string back.
 
----
+This is older than the 2025 hype. It is how you already split work among people: a researcher, an analyst, a writer, a manager who only routes.
 
-## 3. Agent-as-Tool Concept
+Other shapes you will meet later (not required here):
 
-smolagents wraps each managed agent so that it appears to the manager as a callable tool:
+| Shape | Idea |
+|---|---|
+| Manager / specialist (this module) | One router, many workers |
+| Sequential pipeline | A → B → C, no router |
+| Peer debate | Two agents critique each other |
+| Swarm / blackboard | Shared state, many writers |
 
-- The specialist's `name` becomes the tool name.
-- The specialist's `description` becomes the tool's docstring — the manager reads this to understand what the specialist does and what input to send.
-- Calling the specialist with a task string triggers the specialist's full run loop.
-
-The `name` and `description` on the specialist are critical. If the description is vague, the manager may route incorrectly, call the wrong specialist, or try to answer the task itself.
-
----
-
-## 4. Designing Specialist Agents
-
-### One Responsibility Rule
-Each specialist should have a single, well-defined job. A specialist that researches, analyzes, and formats output is hard to debug and easy to misuse. Keep responsibilities narrow.
-
-### Stateless Across Calls
-Each call to a specialist is independent. The specialist does not retain memory between calls from the manager. Do not rely on a specialist remembering context from a previous invocation.
-
-### Description Quality Drives Manager Decisions
-The description should answer three questions:
-1. What does this specialist do?
-2. What format should the input (task string) be in?
-3. What does it return?
-
-Example of a strong description: "Searches the web and visits pages to retrieve factual, up-to-date information. Provide a specific research question as the task. Returns a concise summary with source URLs."
-
-### Appropriate max_steps Per Specialist
-Match `max_steps` to the complexity of the specialist's job:
-- Web researcher: 5–8 steps (search, visit, synthesize)
-- Data analyst: 2–4 steps (parse, compute, return)
-- Report formatter: 2–3 steps (structure text, return)
-
-Setting `max_steps` too low causes the specialist to time out before completing its task.
+MCP, “skills,” and sub-agents in coding tools are the same *idea*: **narrow workers + a policy for who runs when.**
 
 ---
 
-## 5. Information Flow Between Agents
+## 2. When to split (and when not to)
 
-- **Task in**: The manager passes a plain string to the specialist. This string should contain all context the specialist needs — the specialist cannot ask follow-up questions.
-- **Result out**: The specialist returns a string (its final answer). The manager reads this string and incorporates it into its reasoning.
-- **Context window limits**: Each specialist result is added to the manager's context window. If specialists return very long results, the manager's context fills quickly. Design specialists to return concise, structured summaries.
-- **Passing structured data**: If the manager needs to pass numbers, dates, or other structured data to a specialist, it passes them as formatted strings (e.g., comma-separated values). The specialist is responsible for parsing them.
+Split when **one context window and one tool list would fight themselves**:
 
----
+- Research (noisy web) vs arithmetic (must be exact)
+- A writer who should not be allowed to search
+- You want to inspect *which* specialist failed
 
-## 6. When NOT to Use Multi-Agent
+Do **not** split when:
 
-Multi-agent adds overhead (latency, tokens, complexity). Avoid it when:
+- One skill does the job
+- The handoff cannot be a string (you need a shared object graph)
+- Latency or token cost matters more than modularity — **each specialist call is more LLM calls**
+- A Python script would do (ETL, a fixed pipeline)
 
-- **Single-task work**: The task requires only one skill (e.g., pure web search, pure calculation). A single agent with appropriate tools is simpler and faster.
-- **Tight coupling between steps**: If step 2 depends on the exact intermediate state of step 1 in a way that cannot be expressed as a string, multi-agent handoffs become fragile.
-- **Latency-sensitive use cases**: Each specialist call is a separate LLM invocation. Multi-agent systems are slower than single agents. If response time matters, prefer a single agent.
-- **Simple, predictable tasks**: Multi-agent shines on open-ended, multi-domain tasks. Deterministic pipelines (e.g., ETL) are better served by code, not agents.
-
----
-
-## 7. Exercises
-
-### Exercise 1: Add a Report Writer Specialist
-Add a third specialist (`report_writer`) to the existing manager + web_researcher + data_analyst system. The report writer should format findings into a structured markdown report with sections: Summary, Key Findings, Data Analysis, Conclusion. Run the manager on a combined research + analysis + formatting task and verify all three specialists are used.
-
-### Exercise 2: Data Pipeline Multi-Agent System
-Design a two-specialist system where the first specialist finds a public CSV dataset URL for a topic of your choice, and the second specialist analyzes that CSV using the `CSVSummaryTool` from Module 02. The challenge: can the first specialist's output (a URL string) be passed to the second specialist via the manager's task string? Experiment with how to structure the manager's task to make this work.
+Multi-agent is an organization chart. Organization charts have overhead. Draw one only when the work is actually different jobs.
 
 ---
 
-## 8. Summary + Module 06 Preview
+## 3. How routing works: descriptions are the table
 
-### Summary
-Multi-agent orchestration divides complex tasks between specialists coordinated by a manager. The manager has no tools — only other agents. Specialist descriptions are the manager's routing table. Each specialist is stateless, single-responsibility, and sized with appropriate `max_steps`.
+The manager does not get a secret `if` statement you wrote. It gets **text**:
 
-### Module 06 Preview: MLflow Observability
-Multi-agent systems are powerful but non-deterministic. The same prompt can take different paths, call different specialists, and produce different results. Module 06 adds MLflow to record every run: which model was used, which tools were called, how many steps each agent took, and how long it ran. This observability layer is how you iterate on agent design scientifically rather than by intuition.
+```
+You can also give tasks to team members.
+- web_researcher: Searches the web and visits pages. Pass a specific question.
+  Returns a short summary with source URLs.
+- data_analyst: Analyzes a local CSV path. Pass the path and the question.
+  Returns numbers, not prose.
+```
+
+That list is built from each specialist’s `name` and `description`. If the description is vague, routing is vague. This is Module 02’s schema lesson, one level up.
+
+**Write descriptions that answer:**
+
+1. What does this worker do?
+2. What should the task string look like?
+3. What comes back?
+
+Specialists are **stateless across manager calls**. If the analyst needs a path, the manager must put that path in the task string every time.
+
+Keep `max_steps` small on specialists (2–6). They should not wander. The manager can have a slightly higher budget.
+
+---
+
+## 4. How smolagents implements this
+
+There is **no** `ManagedAgent` wrapper in current smolagents. (The February 2026 design doc is stale.) You set `name` and `description` **on the agent**, then pass the objects in:
+
+```python
+researcher = ToolCallingAgent(
+    tools=[WebSearchTool(), VisitWebpageTool()],
+    model=model,
+    name="web_researcher",
+    description=(
+        "Web research specialist. Pass a specific factual question. "
+        "Returns a short answer with source URLs."
+    ),
+    max_steps=6,
+)
+
+analyst = CodeAgent(
+    tools=[csv_tool],
+    model=model,
+    name="data_analyst",
+    description=(
+        "Local CSV analyst. Pass a file path and a numeric question. "
+        "Returns figures, not a blog post."
+    ),
+    max_steps=4,
+)
+
+manager = CodeAgent(
+    tools=[],
+    model=model,
+    managed_agents=[researcher, analyst],
+    max_steps=10,
+)
+```
+
+`manager.managed_agents` is a **dict keyed by name**. Iterate `.values()` if you want the objects.
+
+Mix types on purpose: a JSON-calling researcher (no arbitrary code) and a CodeAgent analyst (needs pandas-via-tool). The manager can be either type; `CodeAgent` is a reasonable default so it can stitch numbers in Python after the handoffs.
+
+---
+
+## 5. Inspecting delegation
+
+After `manager.run(...)`, walk `manager.memory.steps`. You are looking for tool calls whose names are `web_researcher` / `data_analyst`. Nested traces live on the specialist’s own `memory` **for that call** — print them if you need to debug a bad handoff.
+
+Cost: manager tokens + every specialist run. Two specialists on a toy task can be 5–10× a single agent. That is why “when not to” is part of the lesson, not a footnote.
+
+---
+
+## 6. Exercises
+
+1. Add `report_writer` (formatting only, no search). Confirm all three names appear in the manager trace.
+2. Analyst on **`data/sample_sales.csv`** (do not depend on a URL the researcher “found”). Optional stretch: researcher finds a *public* CSV URL and the manager passes that string through — if the download fails, fall back to the local file.
+
+---
+
+## 7. What you should be able to say out loud
+
+- Multi-agent is an org chart, not a smarter model.
+- The manager routes on **descriptions**.
+- Handoffs are strings. If it is not in the task, the specialist does not have it.
+- I can name three reasons *not* to split.
+
+**Next — Module 06.** Non-determinism plus nested calls means you need traces you can compare. Manual MLflow first, then `mlflow.smolagents.autolog()`.

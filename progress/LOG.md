@@ -18,6 +18,16 @@ Format:
 
 ---
 
+## 2026-09-16 — Module 05 multi-agent orchestration
+
+- **Who:** coding agent (Grok 4.6)
+- **Why:** Keep manager + `name`/`description` (not `ManagedAgent`). Local CSV fallback. Put “when not to split” in the learner path.
+- **Changed:** `05_multi_agent_orchestration/{outline.md,instructions.md,notebook.ipynb}`, `progress/_nb_05.py`
+- **Verified:** `managed_agents` is a dict keyed by `data_analyst`. Manager called `data_analyst(...)` on `qwen2.5-coder:3b`. Specialist did **not** use `csv_summary` and invented 1000 rows — documented as a weak-model failure, not an API failure. Stronger model recommended for numeric truth.
+- **Follow-up:** Module 06 file-store MLflow + autolog.
+
+---
+
 ## 2026-09-16 — Module 04 web search (`WebSearchTool`)
 
 - **Who:** coding agent (Grok 4.6)
