@@ -1,32 +1,36 @@
-# Module 02: Tools & Custom Tools
+# Module 02: Tools & Custom Tools — how to run this lab
 
-## Learning Objectives
+**Module:** 02 of 06  
+**Read first:** [`outline.md`](outline.md)  
+**Then run:** [`notebook.ipynb`](notebook.ipynb)
 
-By the end of this module you will be able to:
+---
 
-1. **Inspect built-in smolagents tools** — read `.name`, `.description`, `.inputs`, and `.output_type` to understand what the LLM receives in its context window.
-2. **Write a `@tool`-decorated function** — apply correct type hints and a properly formatted docstring so smolagents auto-generates a valid tool schema.
-3. **Subclass `Tool` for stateful tools** — implement `__init__` to store API keys or load resources, and `forward()` to hold tool logic.
-4. **Understand the tool schema** — explain what `name`, `description`, `inputs`, and `output_type` map to in the LLM prompt, and why input descriptions determine agent reliability.
-5. **Integrate custom tools into a `CodeAgent`** — pass a list of tool instances to `CodeAgent(tools=[...])` and verify the agent uses them correctly.
+## Learning objectives
+
+- Inspect a tool schema (`.name`, `.description`, `.inputs`, `.output_type`) and explain that this is all the model sees
+- Write a `@tool` function with type hints and a Google-style `Args:` docstring
+- Subclass `Tool`, call `super().__init__()`, and implement `forward()`
+- Test a tool as a plain Python object before handing it to an agent
+- Run a `CodeAgent` with more than one custom tool
 
 ---
 
 ## Prerequisites
 
-- Module 01 complete (you have run the foundations notebook end to end).
-- `HF_TOKEN` environment variable set in your `.env` file.
-- `uv` installed and the project virtual environment created (see the root `README.md`).
+- Module 01 complete
+- Same environment as the README: `uv sync`, `.env` at the repo root
+- Sample CSV at `data/sample_sales.csv` (shipped with the repo)
 
 ---
 
-## Estimated Time
+## Estimated time
 
-60–75 minutes
+75–90 minutes
 
 ---
 
-## How to Run
+## How to run
 
 From the repository root:
 
@@ -34,90 +38,56 @@ From the repository root:
 uv run jupyter lab 02_tools_and_custom_tools/notebook.ipynb
 ```
 
-Run cells top to bottom. Cells marked `# TODO` are exercises — do not skip them; they build on each other in Exercise 3.
+Run top to bottom. Exercise 3 reuses tools from exercises 1 and 2.
 
 ---
 
-## Common Errors
+## Common errors
 
-### 1. Missing type hints on a `@tool` function
+### 1. Missing type hints on `@tool`
 
-**Symptom:** The tool is passed to `CodeAgent` but the agent never calls it, or raises a `KeyError` when schema generation runs.
+Symptom: empty `inputs`, or the agent never calls the tool.
 
-**Cause:** smolagents reads Python type annotations to populate the `inputs[param]["type"]` field. Without annotations, the schema is incomplete and the tool may be silently dropped.
+Fix: annotate every parameter and the return type (`str`, `int`, `float`, `bool`, `list`).
 
-**Fix:** Annotate every parameter and the return type:
+### 2. Wrong docstring shape
+
+smolagents parses **Google-style** `Args:`. NumPy `Parameters` and Markdown bullets will not fill `.inputs[...]["description"]`.
 
 ```python
-# Wrong
-@tool
-def my_tool(query):
-    ...
+"""One-line summary.
 
-# Correct
-@tool
-def my_tool(query: str) -> str:
-    ...
+Args:
+    query: Plain-English search string.
+    limit: Max results, 1–50.
+"""
 ```
 
----
+### 3. Forgot `super().__init__()`
 
-### 2. Wrong docstring format
+Subclass tools then fail in obscure ways during agent setup. Always call it.
 
-**Symptom:** `tool.inputs` shows empty descriptions, or smolagents raises a parsing error.
+### 4. `list_models` is slow or empty
 
-**Cause:** smolagents expects a Google-style docstring with an `Args:` section. Each parameter must be on its own indented line under `Args:`.
+Pass `pipeline_tag=...`, `limit=1`, and `token=os.environ.get("HF_TOKEN")`. Do not iterate the whole Hub. `filter=` still exists but Hub docs prefer `pipeline_tag` for tasks.
 
-**Fix:** Use this exact format:
+### 5. CoinGecko `429` / network error
 
-```python
-@tool
-def my_tool(query: str, limit: int) -> str:
-    """
-    One-line summary of the tool.
+Expected on the free API. The notebook’s `CryptoPriceTool` should fall back to `data/coingecko_sample.json`. If you wrote your own without a fallback, use that file.
 
-    Args:
-        query: The search string. Use plain English.
-        limit: Maximum number of results to return. Must be between 1 and 50.
-    """
-    ...
-```
+### 6. Agent answers from weights and skips your tool
 
-Note: the `Args:` keyword, the colon after each parameter name, and the indentation are all required.
+The question did not match the description, or the tool was not in `tools=[...]`. Print `agent.tools.keys()` (or `list(agent.tools)`) and tighten the description. Then inspect `memory.steps`.
+
+### 7. `FileNotFoundError` for the sample CSV
+
+Working directory is not the repo root. Use a path relative to `course_setup.ROOT` (the notebook does this) or an absolute path to `data/sample_sales.csv`.
 
 ---
 
-### 3. Tool name collision
+## Tips
 
-**Symptom:** Only one of two similarly-named tools appears in the agent's tool list, or the agent raises a duplicate key error.
-
-**Cause:** Two tools share the same `name` attribute. smolagents uses `name` as a unique key when building the prompt.
-
-**Fix:** Ensure every tool in your `tools=[...]` list has a distinct `name`. For `@tool` functions the name defaults to the function name (underscores preserved). For subclasses, set `name = "..."` explicitly as a class attribute.
-
----
-
-### 4. `huggingface_hub` not returning results
-
-**Symptom:** `list_models(...)` returns an empty iterator or raises an HTTP error in the `top_hf_model` tool.
-
-**Cause:** Network issue or the HuggingFace Hub API is rate-limiting unauthenticated requests.
-
-**Fix:**
-- Ensure `HF_TOKEN` is set in your `.env` file and `load_dotenv()` has been called.
-- Pass the token explicitly: `list_models(filter=task, sort="downloads", direction=-1, token=os.environ["HF_TOKEN"])`.
-- If you are behind a proxy, set `HTTPS_PROXY` in your environment.
-
----
-
-## Pro Tips
-
-- **Test tools directly before passing them to an agent.** Call `my_tool("some input")` in a notebook cell and verify the output is what you expect. Debugging a bad tool inside an agent loop is much harder than debugging it in isolation.
-
-- **Keep tool descriptions under 200 words.** Every tool description is injected into the LLM's system prompt. Long descriptions consume context and can push out other important instructions. Be precise, not exhaustive.
-
-- **Put format examples in your input descriptions.** Instead of `"The date to query"`, write `"The date to query in ISO 8601 format, e.g. '2024-01-15'"`. The LLM will follow the example.
-
-- **Return strings whenever possible.** Even if your tool computes a number, returning a formatted string (e.g., `"42.7 degrees Celsius"`) reduces the chance of type coercion errors in the agent's generated code.
-
-- **Use `super().__init__()` in subclass `__init__`.** Omitting this call skips internal smolagents setup and will cause obscure failures at runtime.
+- Call `my_tool("...")` yourself. If that output is garbage, the agent cannot save you.
+- Return **strings**, including error strings.
+- Put examples in input descriptions (`e.g. 'bitcoin'`).
+- Keep descriptions short. Schema is prompt.

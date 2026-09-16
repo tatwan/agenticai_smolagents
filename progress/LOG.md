@@ -18,6 +18,19 @@ Format:
 
 ---
 
+## 2026-09-16 — Module 02 tools lesson
+
+- **Who:** coding agent (Grok 4.6)
+- **Why:** Notebook was a thin demo; CSV tool never ran; Hub `list_models(filter=)` was dated; CoinGecko had no fallback.
+- **Changed:** `02_tools_and_custom_tools/{outline.md,instructions.md,notebook.ipynb}`, `data/coingecko_sample.json`, `progress/_nb_02.py`
+- **Verified:**
+  - `WebSearchTool().name == "web_search"`, engine `duckduckgo`
+  - `CSVSummaryTool` isolation test on `data/sample_sales.csv` → shape `(12, 6)`
+  - `CodeAgent` + `csv_summary` on `qwen2.5-coder:3b` → 12 rows, regions east/north/south/west (recovered after a blocked `import csv`)
+- **Follow-up:** Module 03 comparison; ToolCallingAgent needs a model with native tool calling.
+
+---
+
 ## 2026-09-16 — P0 first-run path + Module 01 lesson rewrite
 
 - **Who:** coding agent (Grok 4.6)

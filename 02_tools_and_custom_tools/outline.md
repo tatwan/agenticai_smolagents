@@ -1,256 +1,179 @@
-# Module 02: Tools & Custom Tools — Outline
+# Module 02: Tools & Custom Tools
+
+**Read this first**, then run `notebook.ipynb`.
+
+**Time:** 75–90 minutes · **Depends on:** Module 01 (`CodeAgent`, `memory.steps`, a working model)
 
 ---
 
-## 1. What Makes a Good Tool?
+## 1. What is a tool?
 
-### Tool Schema Anatomy
+In every agent stack, a **tool** is a function the harness is willing to run when the model asks.
 
-Every tool in smolagents is defined by four fields. These fields are serialized directly into the LLM prompt, so their quality determines whether the agent uses the tool correctly or not at all.
+That is a narrower idea than “anything the model might do.” The model cannot:
 
-| Field | Type | Purpose |
-|---|---|---|
-| `name` | `str` | The identifier the LLM writes in generated code to call the tool |
-| `description` | `str` | Natural language explanation the LLM reads to decide *when* to use this tool |
-| `inputs` | `dict[str, dict]` | A dictionary mapping each parameter name to its type and description |
-| `output_type` | `str` | What the LLM should expect back: `"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"`, `"any"` |
+- open your laptop’s files unless you wrap that in a tool
+- hit CoinGecko unless you wrap that in a tool
+- see your Python source unless you paste it into the prompt (please do not)
 
-### Why Docstring Quality Directly Affects Agent Performance
+The model **can** read a short description of the function and guess arguments. That description is the **schema**.
 
-The LLM receives the tool schema as part of its system prompt. It has no access to your Python source code, no type stubs, and no runtime introspection. The agent's decision logic is:
-
-1. Read the `description` — "Do I need this tool right now?"
-2. Read the `inputs` descriptions — "What values should I pass?"
-3. Generate code that calls the tool with those values.
-
-If your description is vague (e.g., `"does stuff with data"`), the agent will either skip the tool entirely or call it with wrong arguments. If your input descriptions omit units, formats, or valid value examples, the agent will guess — often incorrectly.
-
-**Practical rules:**
-- Write the `description` as if explaining the tool to a junior developer in one paragraph.
-- Specify exact input formats in the `inputs` description (e.g., "ISO 8601 date string, e.g. '2024-01-15'").
-- State what the return value looks like in the `description` (e.g., "Returns a JSON string containing...").
-- Keep descriptions under 200 words — LLM context is finite.
-
----
-
-## 2. Built-in smolagents Tools
-
-smolagents ships with several ready-to-use tools. These follow the same schema contract as custom tools and can be mixed freely with your own tools.
-
-| Tool Class | `name` | Primary Use |
-|---|---|---|
-| `PythonInterpreterTool` | `python_interpreter` | Executes arbitrary Python code in a sandboxed subprocess; returns stdout |
-| `DuckDuckGoSearchTool` | `web_search` | Runs a DuckDuckGo web search and returns a list of result snippets |
-| `VisitWebpageTool` | `visit_webpage` | Fetches the text content of a URL; useful for reading search results |
-| `SpeechToTextTool` | `transcriber` | Transcribes audio files using a Whisper-based model on HuggingFace |
-
-### Inspecting a Built-in Tool
-
-Every tool exposes its schema as plain Python attributes. You can inspect them at runtime:
-
-```python
-from smolagents import DuckDuckGoSearchTool
-
-tool = DuckDuckGoSearchTool()
-print(tool.name)         # "web_search"
-print(tool.description)  # multi-line string describing search behavior
-print(tool.inputs)       # {'query': {'type': 'string', 'description': '...'}}
-print(tool.output_type)  # "string"
+```
+You (engineer)                 Harness                      Model
+─────────────────              ──────────                   ─────
+write Python                   expose schema in             read schema
+implement forward()    →       the system prompt     →      choose name + args
+return a string                execute, capture             never see source
+                               observation
 ```
 
-This is useful for:
-- Understanding what the LLM sees when this tool is in its context.
-- Debugging why an agent is or is not using a specific tool.
-- Copying input schema patterns for your own tools.
+This split is not a smolagents quirk. OpenAI function-calling, Anthropic tools, MCP servers, LangChain tools, and a JSON blob you stuff into a system prompt all do the same thing: **the LLM only sees the contract.**
+
+**The sentence to keep:** *The LLM never sees your source. It sees the schema.*
+
+If the agent misuses a tool, the first suspect is the schema, not the model.
 
 ---
 
-## 3. The `@tool` Decorator
+## 2. When to wrap something as a tool
 
-The `@tool` decorator is the fastest way to turn a plain Python function into a smolagents-compatible tool. smolagents inspects the function's type hints and docstring to auto-generate the tool schema.
+| Situation | Tool? | Why |
+|---|---|---|
+| Deterministic math you already know how to write | Maybe | A tool is more reliable than hoping the model arithmetic is right. CodeAgent can also just write the math. |
+| Live data (prices, weather, tickets) | Yes | Weights are stale. |
+| Privileged actions (send email, drop a table) | Yes, and lock the schema down | You want an allow-list, not a Python interpreter. |
+| “Think harder about this paragraph” | No | That is another model call, not a tool. |
+| One-off notebook experiment | No | Call the function yourself. |
 
-### Requirements
+A tool is a **permission and a promise**: “the model may call this, with these arguments, and I will return something shaped like this.”
 
-1. **Type hints on all parameters** — smolagents reads these to populate the `inputs` schema `"type"` field. Without them, schema generation fails silently and the tool may not be registered.
-2. **Return type annotation** — sets `output_type`. Must be one of: `str`, `int`, `float`, `bool`, `list`.
-3. **Docstring with an `Args:` section** — smolagents parses Google-style docstrings. Each parameter must appear under `Args:` with its description on the next indented line.
+Too many tools → the model picks the wrong one. Too-vague descriptions → the model invents arguments. This is why production agents often have **fewer, sharper** tools than demo agents.
 
-### Docstring Format
+---
+
+## 3. How a schema is shaped (any framework)
+
+Four fields. Names vary (`parameters` vs `inputs`, `returns` vs `output_type`). The job does not.
+
+| Field | Job | Failure mode if sloppy |
+|---|---|---|
+| `name` | The identifier the model will write | Collisions; the model calls `search` when you meant `search_docs` |
+| `description` | **When** to use it | Unused tool, or used on every turn |
+| `inputs` | Names, types, formats, examples | Wrong types, missing units, hallucinated keys |
+| `output_type` / returns | What comes back | The model parses a number as a sentence or vice versa |
+
+Write the description as if briefing a competent intern who cannot see the building:
+
+- One sentence: what it does
+- What the arguments look like (`ISO 8601 date, e.g. 2026-09-16`)
+- What success looks like (`"bitcoin: $96420 USD"`)
+- What failure looks like (`"unknown coin_id: xyz"`)
+
+Keep it under ~200 words. Schema is prompt. Prompt is budget.
+
+---
+
+## 4. How smolagents implements this
+
+### Inspect before you invent
+
+Every `Tool` instance has `.name`, `.description`, `.inputs`, `.output_type`. Print them. That is **exactly** what the model will see.
+
+Built-ins worth knowing (smolagents 1.26):
+
+| Class | Typical `name` | Notes |
+|---|---|---|
+| `PythonInterpreterTool` | `python_interpreter` | Used by `ToolCallingAgent` when it needs code. `CodeAgent` already has an interpreter. |
+| `WebSearchTool` | `web_search` | Default engine `duckduckgo`; also `bing`, `exa`. Module 04. |
+| `DuckDuckGoSearchTool` | `web_search` | Still exists; talks to the `ddgs` package. Prefer `WebSearchTool` in new code. |
+| `VisitWebpageTool` | `visit_webpage` | HTML → markdown, truncated. |
+| `FinalAnswerTool` | `final_answer` | Always present. This is how the loop stops. |
+
+### Two ways to build your own
+
+**`@tool` on a function** — no state, no `__init__`. smolagents reads type hints + a Google-style `Args:` docstring and builds the schema.
 
 ```python
 @tool
-def my_tool(param1: str, param2: int) -> str:
-    """
-    One-sentence summary of what this tool does.
-
-    Longer optional explanation. Mention what the output looks like.
+def describe_numbers(numbers: str) -> str:
+    """Return mean and median for a comma-separated list of numbers.
 
     Args:
-        param1: Description of param1. Include format and examples.
-        param2: Description of param2. Specify valid range if applicable.
+        numbers: Comma-separated floats, e.g. '3, 7, 1.5'.
     """
     ...
 ```
 
-The first line of the docstring becomes the `description`. The `Args:` section populates the `"description"` sub-field for each input.
+Requirements: hints on **every** parameter and the return type; `Args:` with one line per parameter. Miss either, and the schema is wrong in a way that is annoying to debug inside an agent loop.
 
-### When to Use `@tool` vs Subclassing
-
-Use `@tool` when:
-- The tool is a pure function with no state.
-- No initialization is required (no API keys to store, no models to load).
-- The logic fits cleanly in a single function body.
-
-Use subclassing when the tool needs `__init__`, as described in the next section.
-
----
-
-## 4. Subclassing `Tool`
-
-When your tool needs to maintain state, load resources at startup, or store credentials, subclass `Tool` directly.
-
-### Class Attribute Contract
-
-Define these four class-level attributes — they serve the same role as the auto-generated schema from `@tool`:
+**Subclass `Tool`** — when you need state (API keys, a loaded file, a session).
 
 ```python
-class MyTool(Tool):
-    name = "my_tool"
+class CryptoPriceTool(Tool):
+    name = "crypto_price"
     description = "..."
-    inputs = {
-        "param": {
-            "type": "string",
-            "description": "...",
-        }
-    }
+    inputs = {"coin_id": {"type": "string", "description": "..."}}
     output_type = "string"
+
+    def __init__(self, timeout: float = 10.0):
+        super().__init__()          # required
+        self.timeout = timeout
+
+    def forward(self, coin_id: str) -> str:
+        ...
 ```
 
-### The `__init__` Method
+`forward()` is the only method the harness calls. Its argument names must match `inputs` keys.
 
-Use `__init__` to accept and store configuration that should not appear in the LLM-visible schema:
+Use `@tool` until you need `__init__`. Then subclass. That rule travels: decorator vs class is how most libraries split “pure function” from “configured client.”
 
-```python
-def __init__(self, api_key: str):
-    super().__init__()
-    self.api_key = api_key
-```
+### Input type strings
 
-Always call `super().__init__()`. smolagents performs internal setup in the parent `__init__` that is required for the tool to function.
+`"string"` | `"integer"` | `"number"` | `"boolean"` | `"array"` | `"object"` | `"any"`
 
-### The `forward()` Method
+Prefer `"string"` over `"object"`. Models emit text. Nested JSON arguments fail more often than a string you parse yourself.
 
-All tool logic lives in `forward()`. This method receives the arguments the LLM generates and returns the output. Its signature must match the `inputs` schema keys exactly:
-
-```python
-def forward(self, param: str) -> str:
-    result = self._call_api(param, key=self.api_key)
-    return str(result)
-```
-
-### When to Use Subclassing
-
-- Storing an API key or token that is passed at instantiation.
-- Loading a heavy model or file once at `__init__` time rather than on every call.
-- Splitting complex logic into private helper methods.
-- Implementing input validation beyond type checking.
+Optional parameters: `"nullable": true` plus a default inside `forward()`.
 
 ---
 
-## 5. Tool Schema Deep-Dive
+## 5. How to test (before you give it to an agent)
 
-### How smolagents Serializes Tools to the LLM Prompt
+1. **Call the tool as a Python object.** `csv_tool("data/sample_sales.csv")` should print something you would be happy to feed a model.
+2. **Print the schema.** If you would not know when to use it, neither will the model.
+3. **Then** pass it into `CodeAgent(tools=[...])` and ask a question that *requires* the tool.
+4. Read `memory.steps`. Did it call your tool, or did it invent an answer from weights?
 
-When you pass tools to an agent, smolagents builds a system prompt that includes each tool's schema. For a `CodeAgent`, the schema appears as a Python function signature with a docstring. For a `ToolCallingAgent`, it is serialized as a JSON object (matching the OpenAI function-calling format).
-
-The serialization reads directly from `name`, `description`, `inputs`, and `output_type`. No other part of your tool code is visible to the LLM.
-
-### Input Type Values
-
-The `"type"` field in each input dict must be one of the following strings:
-
-| Type string | Python equivalent | Notes |
-|---|---|---|
-| `"string"` | `str` | Most common; use for text, IDs, file paths |
-| `"integer"` | `int` | Whole numbers only |
-| `"number"` | `float` | Floating-point values |
-| `"boolean"` | `bool` | True/False flags |
-| `"array"` | `list` | List of items; optionally add `"items"` sub-key |
-| `"object"` | `dict` | Nested structure; rarely needed for simple tools |
-| `"any"` | any | Escape hatch; avoid unless necessary |
-
-### Nullable Fields
-
-Add `"nullable": true` to an input dict to indicate the parameter is optional. The LLM will still be prompted to provide it, but the schema signals it may be omitted:
-
-```python
-inputs = {
-    "limit": {
-        "type": "integer",
-        "description": "Maximum number of results to return. Defaults to 10.",
-        "nullable": True,
-    }
-}
-```
-
-### String vs Integer vs Object Types
-
-Prefer `"string"` over `"object"` wherever possible. LLMs generate text natively; constructing valid JSON dicts as arguments is error-prone. If you need structured input, accept a string and parse it inside `forward()`.
+If step 4 shows no tool call, your description did not match the question. Fix the schema, not the prompt first.
 
 ---
 
-## 6. Exercises
+## 6. Safety, still
 
-### Exercise 1: Stats Tool with `@tool`
+A tool is code **you** run with arguments **the model** chose.
 
-Write a `@tool`-decorated function called `describe_numbers` that:
-- Accepts a single `numbers: str` argument containing comma-separated numeric values (e.g., `"1,2,3,4,5"`).
-- Returns a string reporting the mean, median, and standard deviation.
-- Does not use the `statistics` library — compute manually using `sum()`, `len()`, and sorted lists.
-
-Then create a `CodeAgent` with this tool and ask: "What are the mean, median, and std dev of: 12, 45, 7, 89, 34, 56, 23?"
-
-Learning goal: practice the `@tool` pattern including type hints and docstring format.
-
-### Exercise 2: CryptoPriceTool Subclass
-
-Create a `Tool` subclass called `CryptoPriceTool` that:
-- Has `name = "crypto_price"`.
-- Accepts a `coin_id: str` argument (e.g., `"bitcoin"`, `"ethereum"`, `"solana"`).
-- Calls the free CoinGecko API: `https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd`
-- Returns a formatted string such as `"bitcoin: $67,234 USD"`.
-- Handles errors gracefully — coin not found, API timeout, unexpected response shape.
-
-Learning goal: practice the subclass pattern with a real HTTP dependency.
-
-### Exercise 3: Combined Agent
-
-Combine both tools from Exercises 1 and 2 into a single `CodeAgent`. Ask it:
-
-> "What is the mean and std dev of [3, 7, 1, 9, 4, 6]? Also, what is the current price of ethereum?"
-
-Observe whether the agent calls both tools, and in what order. Print the number of steps taken from the agent's run log.
-
-Learning goal: understand how the agent selects among multiple tools based on schema descriptions.
+- Validate and constrain (`coin_id` allow-list, path confined to a data directory).
+- Time out HTTP.
+- Return error **strings**, not exceptions, when the failure is expected (unknown id, 404). Exceptions abort the hop; strings become observations the model can recover from.
+- Never put secrets in the schema. Pass them in `__init__` from the environment.
 
 ---
 
-## 7. Summary and Module 03 Preview
+## 7. Exercises
 
-### Summary
+1. `@tool describe_numbers` — mean, median, stdev by hand; comma-separated string in.
+2. `CryptoPriceTool` — CoinGecko, with a local JSON fallback when the network 429s.
+3. Combine both in one agent.
 
-This module covered the complete lifecycle of a smolagents tool:
+Success criteria live next to the `# TODO` cells. Sample data: `data/sample_sales.csv`.
 
-- The **tool schema** (`name`, `description`, `inputs`, `output_type`) is what the LLM sees — nothing else.
-- The **`@tool` decorator** auto-generates a schema from type hints and a Google-style docstring. Use it for stateless functions.
-- **Subclassing `Tool`** gives you `__init__` for stateful setup and `forward()` for tool logic. Use it for tools that need API keys, loaded models, or helper methods.
-- **Input descriptions and type strings** directly control how accurately the agent calls your tool. Investing time in good descriptions pays off immediately in agent reliability.
+---
 
-### Module 03 Preview: CodeAgent vs ToolCallingAgent
+## 8. What you should be able to say out loud
 
-You have been using `CodeAgent` throughout this module. In Module 03, you will meet `ToolCallingAgent` — a fundamentally different reasoning architecture:
+- A tool is a permissioned function plus a schema. The model only sees the schema.
+- I test tools in isolation before I wrap them in an agent.
+- `@tool` for pure functions; `Tool` + `forward()` when I need state.
+- Vague descriptions are the main reason agents “don’t use my tool.”
 
-- `CodeAgent` generates Python code and executes it. Tools are called as Python functions within that code.
-- `ToolCallingAgent` generates structured JSON tool calls, one at a time, following the OpenAI function-calling format.
-
-You will run the same task with both agent types, compare their outputs and step counts, and learn exactly when to prefer one over the other. The module ends with a two-line demonstration of swapping the HuggingFace `InferenceClientModel` for an OpenAI-compatible model.
+**Next — Module 03.** Same tool, two loops: the model writes Python vs the model writes JSON. The schema does not change. The action language does.
