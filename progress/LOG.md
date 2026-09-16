@@ -18,6 +18,20 @@ Format:
 
 ---
 
+## 2026-09-16 — Module 04 web search (`WebSearchTool`)
+
+- **Who:** coding agent (Grok 4.6)
+- **Why:** Labs taught `DuckDuckGoSearchTool`; current docs lead with `WebSearchTool`. Year-stale queries. Exercise 2 was too flaky as the only second task.
+- **Changed:** `04_web_search_and_browsing/{outline.md,instructions.md,notebook.ipynb}`, `progress/_nb_04.py`
+- **Verified:**
+  - `WebSearchTool(engine="duckduckgo")` → `Exception: No results found` from this network
+  - `WebSearchTool(engine="bing")` → results including python.org
+  - `VisitWebpageTool` on `https://docs.python.org/3/` → page text, ~2k chars with `max_output_length=2000`
+  - Guided **agent** cells not live-run (search flake + time). Notebook isolation cell falls back to bing.
+- **Follow-up:** Module 05 manager/specialists; use local CSV as fallback.
+
+---
+
 ## 2026-09-16 — Module 03 CodeAgent vs ToolCallingAgent
 
 - **Who:** coding agent (Grok 4.6)
