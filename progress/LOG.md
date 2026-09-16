@@ -18,6 +18,20 @@ Format:
 
 ---
 
+## 2026-09-16 — Module 06 observability + course wrap-up
+
+- **Who:** coding agent (Grok 4.6)
+- **Why:** Manual-only MLflow was behind `mlflow.smolagents.autolog()`. File store is maintenance-mode in MLflow 3.16. Module 06 Colab UI was a lie. Wrap-up needed MCP/eval/HF course pointers.
+- **Changed:** `06_mlflow_observability/{outline.md,instructions.md,notebook.ipynb}`, `.gitignore` (`mlflow.db`), README/AGENTS MLflow commands, `progress/_nb_06.py`, `progress/CURRENT_STATE.md`
+- **Verified:**
+  - `mlflow.set_tracking_uri("file:...")` raises unless `MLFLOW_ALLOW_FILE_STORE=true`
+  - `sqlite:///mlflow.db` works; experiment `smolagents-course` created
+  - Manual CodeAgent word-count-and-double → **12**; autolog run → **6** words
+  - `search_runs` returned at least one FINISHED run
+- **Follow-up:** Live-run Module 01 on Hugging Face Inference Providers when a token with the right permission is available. Optional: `mlflow ui` screenshot. Do not commit `mlflow.db`.
+
+---
+
 ## 2026-09-16 — Module 05 multi-agent orchestration
 
 - **Who:** coding agent (Grok 4.6)

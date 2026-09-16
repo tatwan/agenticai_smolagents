@@ -1,103 +1,80 @@
-# Module 06: MLflow Observability
+# Module 06: Observability — how to run this lab
 
-## Learning Objectives
+**Module:** 06 of 06 (wrap-up)  
+**Read first:** [`outline.md`](outline.md)  
+**Then run:** [`notebook.ipynb`](notebook.ipynb)
 
-By the end of this module you will be able to:
+---
 
-1. Start a local MLflow tracking server and connect to it from a notebook
-2. Log agent runs with params (configuration), metrics (measurements), and artifacts (outputs)
-3. Capture step-level traces as JSON artifacts for deep debugging
-4. Compare runs in the MLflow UI to measure agent performance differences
-5. Apply observability to multi-agent systems by tracking specialist-level metrics
+## Learning objectives
+
+- Explain params vs metrics vs artifacts/traces in words that work for Phoenix or LangSmith too
+- Log a run **without** starting `mlflow ui`
+- Use a helper `run_and_trace()` and then `mlflow.smolagents.autolog()`
+- Compare two runs from Python (`search_runs`) or, optionally, the UI
+- Know Colab cannot host `localhost:5000`
 
 ---
 
 ## Prerequisites
 
-- **All previous modules completed** (01 through 05)
-- MLflow installed — it is already declared in `pyproject.toml`; no separate install step needed
-- A valid `HF_TOKEN` in your `.env` file
+- Modules 01–05 conceptually (you can log a Module 01 Fibonacci agent if 05 is tired)
+- `mlflow` from `uv sync` (3.x is expected)
 
 ---
 
-## Estimated Time
+## Estimated time
 
 75–90 minutes
 
 ---
 
-## How to Run
+## How to run
 
-This module requires two terminals running simultaneously.
-
-**Terminal 1 — Start the MLflow tracking server:**
-```bash
-cd smolagents
-uv run mlflow ui --port 5000
-```
-
-Leave this terminal running for the entire session.
-
-**Terminal 2 — Start the notebook:**
 ```bash
 uv run jupyter lab 06_mlflow_observability/notebook.ipynb
 ```
 
-**Browser — Open the MLflow UI:**
+**No second terminal is required** for the guided cells. Tracking goes to `sqlite:///mlflow.db` in the repo root (MLflow 3.16 no longer wants a bare `./mlruns` file store).
 
-Navigate to http://localhost:5000
+Optional UI, from the repo root:
 
-You should see the MLflow home screen. The `smolagents-course` experiment will appear after you run the first code cell that calls `mlflow.set_experiment()`.
-
----
-
-## Common Errors
-
-### 1. Port 5000 already in use
-
-**Symptom:** `OSError: [Errno 48] Address already in use` when starting the MLflow server.
-
-**Fix:** Use a different port:
 ```bash
-uv run mlflow ui --port 5001
-```
-Then update the tracking URI in the notebook Setup cell:
-```python
-mlflow.set_tracking_uri("http://localhost:5001")
+uv run mlflow ui --port 5000 --backend-store-uri sqlite:///mlflow.db
 ```
 
----
+Then http://localhost:5000. If port 5000 is busy, pick another (`--port 5001`).
 
-### 2. Experiment already exists
-
-**Symptom:** Warning or error when calling `mlflow.create_experiment()`.
-
-**Fix:** Always use `mlflow.set_experiment()` instead. It creates the experiment if it does not exist, or retrieves it if it does. Never use `mlflow.create_experiment()` in notebook code.
+**Colab:** skip the UI. Run `mlflow.search_runs()` as in the notebook. The Colab badge is for the logging cells only.
 
 ---
 
-### 3. "Run already active" error
+## Common errors
 
-**Symptom:** `MlflowException: Run with UUID ... is already active.`
+### 1. `mlflow ui` connection refused
 
-**Fix:** This happens when you nest `mlflow.start_run()` calls without ending the outer run. Make sure every `with mlflow.start_run():` block is properly closed before starting a new one. If you interrupted a cell mid-run, call `mlflow.end_run()` in a new cell to reset the state.
+You never started the server, or you are in Colab. Use the file store + `search_runs`. The course is complete without the UI.
+
+### 2. Empty experiment / cannot find runs
+
+Tracking URI does not match. Print `mlflow.get_tracking_uri()`. Start the UI from the **repo root** so it sees `mlflow.db`. You can pass `--backend-store-uri sqlite:///mlflow.db`.
+
+### 3. `create_experiment` / “already exists”
+
+`set_experiment("smolagents-course")` is enough. Do not also `create_experiment` with the same name.
+
+### 4. Huge `steps_trace.json`
+
+Truncate `str(step)[:500]`. Web page observations will explode the file.
+
+### 5. Autolog shows nothing
+
+Call `mlflow.smolagents.autolog()` **before** `agent.run()`. Compatible range (MLflow 3.16): smolagents 1.22–1.26. Tool-calling details may be missing — fall back to manual logs.
 
 ---
 
-### 4. Artifacts not showing in the UI
+## Tips
 
-**Symptom:** You called `mlflow.log_text()` or `mlflow.log_dict()` but no artifacts appear in the MLflow UI.
-
-**Fix:** Both calls require an active run context. Make sure they are inside a `with mlflow.start_run():` block. Calling them outside a run context silently fails in some MLflow versions.
-
----
-
-### 5. Steps serialization error
-
-**Symptom:** `TypeError` or `ValueError` when calling `mlflow.log_dict()` with step data.
-
-**Fix:** The `str(step)` representation of a smolagents step object may contain characters that are not JSON-safe (e.g., embedded newlines in code blocks, Unicode characters from web pages). Always truncate with `[:500]` before adding to the dict:
-```python
-"content": str(step)[:500]
-```
-This keeps the artifact manageable in size and avoids serialization failures.
+- Log failures too (`status` as a param).
+- One `run_name` per idea (`codeagent-wordcount`, `toolcalling-wordcount`).
+- Do not commit `mlruns/`.

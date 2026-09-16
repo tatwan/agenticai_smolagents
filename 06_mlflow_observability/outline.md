@@ -1,136 +1,142 @@
-# Module 06: MLflow Observability — Outline
+# Module 06: Observability — traces you can compare
 
-## 1. Why Observability for Agents?
+**Read this first**, then run `notebook.ipynb`. This is also the **course wrap-up**.
 
-- **Non-determinism is the core challenge**: the same prompt can produce 3 steps or 8 steps, a confident answer or a hallucination. You cannot reason about what you cannot observe.
-- **Debugging without traces is guesswork**: in a multi-agent system, when something goes wrong, you need to know which agent failed, at which step, and why — not just that the final output was wrong.
-- **Systematic improvement requires data**: to answer "Why did run B perform better than run A?", you need structured records of both runs. Logging turns anecdotal observation into reproducible evidence.
-- **Enables iteration**: once you can measure duration, step count, and output quality across runs, you can make deliberate changes and verify whether they helped.
+**Time:** 75–90 minutes · **Depends on:** Modules 01–05 · **Colab:** logging works; the MLflow **UI** does not (no `localhost:5000`)
 
 ---
 
-## 2. MLflow Concepts Refresher
+## 1. What is observability for agents?
 
-### Core objects
+An agent is a **non-deterministic program**. Same prompt, different hop counts, different tools, different wording, sometimes different facts.
 
-| Concept | What it is | Agent analogy |
-|---------|-----------|---------------|
-| **Experiment** | A named project grouping related runs | `smolagents-course` |
-| **Run** | One execution within an experiment | A single `agent.run()` call |
-| **Params** | Configuration values (strings/numbers logged once) | `model_id`, `max_steps`, `agent_type` |
-| **Metrics** | Numeric measurements (can be logged over time) | `duration_seconds`, `steps_taken` |
-| **Artifacts** | Files attached to a run | `result.txt`, `steps_trace.json` |
+If you cannot answer “what did it do?”, you cannot improve it. Observability is not a dashboard fetish. It is:
 
-### MLflow UI walkthrough
+| Question | You log |
+|---|---|
+| What did I intend? | params (model id, agent type, `max_steps`, task) |
+| What happened numerically? | metrics (duration, step count, tokens if you have them) |
+| What did it actually say and call? | artifacts / traces (result text, `memory.steps`) |
 
-- **Experiment view**: left sidebar lists all experiments; clicking one shows a table of all runs with param and metric columns visible at a glance.
-- **Run detail view**: click a run name to see its full params, metrics timeline, and artifacts panel.
-- **Artifacts panel**: navigate the file tree; text and JSON files render inline.
-- **Compare view**: select two or more runs and click "Compare" to get a side-by-side diff of params and a chart overlay of metrics.
+This is the same split as classical ML experiments (MLflow, W&B) and as production tracing (OpenTelemetry, Phoenix, Langfuse, LangSmith). **Params / metrics / traces.** The vendor changes. The three buckets do not.
+
+smolagents’ own docs instrument via OpenTelemetry and show Phoenix, MLflow autolog, and Langfuse. We use MLflow because it is local, open source, and already in this repo. The *habit* transfers.
 
 ---
 
-## 3. Logging Agent Runs Manually
+## 2. When to log (always) vs when to open a UI
 
-### Pattern
+Log **every** run you might want to compare — including failures.
+
+Open a UI when you need to *diff* two runs visually. You do **not** need a UI to learn this module. A file store plus `mlflow.search_runs()` is enough. That is what works in Colab.
+
+Evaluation (pass/fail on golden tasks) is **related but different**. Tracing says what happened. Eval says whether it was good. We stay on traces here; the wrap-up points at eval as a next step.
+
+---
+
+## 3. How we log in this course
+
+### Local SQLite first (no extra terminal)
+
+MLflow 3.16 put the classic `./mlruns` filesystem backend in maintenance mode. A **SQLite** URI is the current local default and still needs no server:
+
 ```python
-with mlflow.start_run(run_name="descriptive-name"):
-    mlflow.log_param("key", value)      # configuration
+from pathlib import Path
+import mlflow
+
+db = Path("mlflow.db").resolve()
+mlflow.set_tracking_uri(f"sqlite:///{db}")
+mlflow.set_experiment("smolagents-course")
+```
+
+`mlflow.db` and `mlruns/` (artifact files) are gitignored. Do not commit them.
+
+If you truly need the old file store, MLflow requires `MLFLOW_ALLOW_FILE_STORE=true`. We do not.
+
+### Manual record (you should understand this even if autolog exists)
+
+```python
+import time, json
+
+with mlflow.start_run(run_name="fibonacci-codeagent"):
+    mlflow.log_params({"agent_type": "CodeAgent", "max_steps": 8, "model_id": model.model_id})
+    t0 = time.perf_counter()
     result = agent.run(task)
-    mlflow.log_metric("steps_taken", len(agent.memory.steps))
-    mlflow.log_text(str(result), "result.txt")
-```
-
-### What to log for agents
-
-| Category | What | Why |
-|----------|------|-----|
-| Params | `model_id`, `agent_type`, `max_steps`, `task` (truncated) | Reproduce the exact setup |
-| Metrics | `duration_seconds`, `steps_taken` | Measure efficiency |
-| Artifacts | Final result text, step trace JSON | Inspect outputs and reasoning |
-
-### Key API calls
-- `mlflow.start_run(run_name=...)` — context manager; auto-ends the run on exit
-- `mlflow.log_param(key, value)` — single param; or `mlflow.log_params({...})` for a dict
-- `mlflow.log_metric(key, value)` — numeric measurement
-- `mlflow.log_text(text, filename)` — saves a string as a file artifact
-- `mlflow.log_dict(dict, filename)` — saves a dict as a JSON artifact
-
----
-
-## 4. Step-Level Tracing
-
-### Why step traces matter
-
-The final result tells you *what* the agent produced. Step traces tell you *how* it got there — every tool call, every intermediate thought, every error and retry.
-
-### Capturing steps
-```python
-steps_data = []
-for i, step in enumerate(agent.memory.steps):
-    steps_data.append({
-        "index": i,
-        "type": type(step).__name__,
-        "content": str(step)[:500],   # truncate to avoid JSON size issues
+    mlflow.log_metrics({
+        "duration_seconds": time.perf_counter() - t0,
+        "steps_taken": len(agent.memory.steps),
     })
-mlflow.log_dict({"steps": steps_data}, "steps_trace.json")
+    mlflow.log_text(str(result), "result.txt")
+    steps = [{"i": i, "type": type(s).__name__, "text": str(s)[:500]}
+             for i, s in enumerate(agent.memory.steps)]
+    mlflow.log_dict({"steps": steps}, "steps_trace.json")
 ```
 
-### Serialization gotchas
-- `agent.memory.steps` contains rich objects; `str(step)` is the safest serialization
-- Long tool outputs (web pages, code results) can make the JSON huge — always truncate with `[:500]`
-- `type(step).__name__` gives you the step class (e.g., `ActionStep`, `PlanningStep`) without importing smolagents internals
+### Then autolog (the 2026 one-liner)
+
+```python
+mlflow.smolagents.autolog()  # compatible with smolagents 1.22–1.26 as of MLflow 3.16
+agent.run(task)              # traces appear without a with-block
+```
+
+MLflow’s autolog note: **async APIs and some tool-calling details may not record.** Manual logs remain the teaching device and the backup.
+
+### Optional UI
+
+```bash
+uv run mlflow ui --port 5000
+# http://localhost:5000
+```
+
+Colab cannot open that. Use `mlflow.search_runs()` in the notebook instead.
 
 ---
 
-## 5. Comparing Runs
+## 4. What to compare
 
-### What to compare
+- **steps_taken** — gave up vs looped
+- **duration_seconds** — slow tools vs slow models
+- **result.txt** — same facts, different wording, or a miss
+- **steps_trace.json** — where two agent types diverged (Module 03, now with evidence)
 
-| Metric | What it reveals |
-|--------|----------------|
-| `steps_taken` | Which agent type is more efficient? |
-| `duration_seconds` | Which configuration is faster? |
-| `steps_trace.json` artifacts | Where did each agent diverge in reasoning? |
-
-### MLflow UI comparison workflow
-
-1. Open the experiment view
-2. Check the boxes next to the runs you want to compare
-3. Click the **Compare** button
-4. The comparison page shows: a params diff table (highlight differences), metric bar charts side by side, and a scatter plot if you have many runs
-5. Use the **Search** bar to filter runs by param values, e.g. `params.agent_type = 'CodeAgent'`
-
-### What matters most for agent iteration
-- **Steps taken** is the most diagnostic metric: too few steps may mean the agent gave up; too many may indicate looping or inefficiency
-- **Duration** often correlates with steps but can also reveal slow tool calls
-- **Artifacts** are essential when metrics look similar but outputs differ
+Three identical tasks in a row is the non-determinism lab. Expect variance. That is the point.
 
 ---
 
-## 6. Exercises
+## 5. Exercises
 
-### Exercise 1: Observing Multi-Agent Systems
-Re-create the manager + specialist setup from Module 05. Wrap the `manager.run()` call using the `run_and_trace()` helper. Add an additional challenge: also log specialist step counts as separate metrics inside a manual `mlflow.start_run()` block. Inspect the artifacts to see which specialist did what.
-
-### Exercise 2: Non-Determinism Experiment
-Run the same agent and task 3 times, logging each as a separate MLflow run. Compare `steps_taken` and `duration_seconds` across all 3 runs in the UI. Download `result.txt` from each run. Are the answers identical? Different wording but same facts? Completely different? This is the empirical demonstration of agent non-determinism.
+1. Wrap a Module 05-style manager run (even analyst-only) with `run_and_trace()`; log specialist step counts if you can reach them.
+2. Same agent + task, three runs; compare `steps_taken` and the three `result.txt`s. Are they identical?
 
 ---
 
-## 7. Course Wrap-Up
+## 6. Course wrap-up — what you can now do
 
-### The full learning arc
+| Module | Capability |
+|---|---|
+| 01 | See the loop in a trace |
+| 02 | Give the model a schema, not source |
+| 03 | Pick code-as-action vs JSON-as-action |
+| 04 | Retrieve open information; cite for real |
+| 05 | Route on descriptions |
+| 06 | Compare runs with data |
 
-| Module | Concept | Skill |
-|--------|---------|-------|
-| 01 Foundations | The agent loop | Run a CodeAgent, inspect steps |
-| 02 Tools | Tool design | @tool decorator, Tool subclass, schema |
-| 03 Agent Types | CodeAgent vs ToolCallingAgent | Choose the right agent for the job |
-| 04 Web Search | Retrieval-augmented agents | DuckDuckGo, VisitWebpage, research workflows |
-| 05 Multi-Agent | Orchestration | Manager + specialists, delegation patterns |
-| 06 Observability | MLflow | Log, trace, compare, improve |
+Those six are the spine of *any* agent stack.
 
-### The through-line
+### Where next (not this repo)
 
-Each module added one capability layer: you can now build an agent that uses tools, browses the web, delegates to specialists, and produces structured logs you can analyze. The combination is a production-ready pattern for building and iterating on agentic systems.
+- **Longer curriculum:** [Hugging Face Agents Course](https://huggingface.co/learn/agents-course) — same library, more units.
+- **MCP:** `ToolCollection.from_mcp` / `MCPClient` in smolagents — tools from an external server. One paragraph, not a seventh required module.
+- **Eval:** three golden tasks, pass/fail against traces. Phoenix/Langfuse if you outgrow files.
+- **Sandbox:** `executor_type` for CodeAgent the moment tools leave “tutorial.”
+- **Other frameworks:** LangGraph, CrewAI, raw tool-calling APIs. Different org charts, same loop.
+
+You do not need another framework to be done. You need a task, a tight tool list, and traces.
+
+---
+
+## 7. What you should be able to say out loud
+
+- Observability is params + metrics + traces. The product name is optional.
+- Autolog is convenient; manual logs teach you what “a run” is.
+- I will not ship a multi-agent system I cannot diff.

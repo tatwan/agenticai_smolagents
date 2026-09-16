@@ -28,14 +28,15 @@ This is a teaching repo. It is not an app. Do not add a web service, a package A
 
 ## Current truth (do not ignore)
 
-As of **2026-09-16** P0 (first-run path) is in the tree and Module 01 has been rewritten. Modules 02–06 may still be the February labs until this session finishes them.
+As of **2026-09-16** P0 is done and all six modules have been rewritten as learner-facing lessons. Treat `progress/LOG.md` as the event log.
 
 - Canonical commands: repo root (no `cd smolagents`), `uv sync`, `cp .env.example .env`.
 - Default Hub model: `Qwen/Qwen3-Next-80B-A3B-Thinking` via `course_setup.py`. Ollama is the documented zero-cost path.
-- Full evidence and ordered backlog: `progress/AUDIT.md`.
-- Disk snapshot: `progress/CURRENT_STATE.md`. Treat `progress/LOG.md` as newer than the snapshot.
+- Search tool taught: `WebSearchTool` (Bing fallback when DuckDuckGo Lite is empty).
+- MLflow: SQLite URI, then optional `mlflow ui`; `mlflow.smolagents.autolog()` after a manual log.
+- Hugging Face cloud path was **not** live-run in the refresh session (no `HF_TOKEN`). Local Ollama `qwen2.5-coder:3b` was.
 
-Do not claim the **whole course** is refreshed until Modules 02–06 match Module 01’s contract and LOG records a live Module 01 run.
+Do not claim every Colab path or every Hub model id is verified until someone runs with a real Inference Providers token.
 
 ---
 
@@ -97,7 +98,7 @@ Keep teaching these unless upstream removes them:
 - `agent.run()`, `agent.memory.steps`
 - `managed_agents=` with `name` and `description` **on the agent** (not a separate `ManagedAgent` wrapper — the Feb design doc is stale on this)
 - `VisitWebpageTool`
-- Search: current docs prefer `WebSearchTool`; labs still say `DuckDuckGoSearchTool`. When you touch Module 04+, migrate deliberately and update README/outlines/instructions together.
+- Search: teach `WebSearchTool` (`engine="duckduckgo"` with Bing fallback). `DuckDuckGoSearchTool` still exists; mention it, do not make it the default.
 
 ### APIs / stories we must stop teaching as-is
 
@@ -164,7 +165,7 @@ uv sync
 cp .env.example .env   # then edit HF_TOKEN
 uv run jupyter lab
 uv run python -c "import smolagents; print(smolagents.__version__)"
-uv run mlflow ui --port 5000   # module 06, optional once file-store works
+uv run mlflow ui --port 5000 --backend-store-uri sqlite:///mlflow.db   # module 06, optional
 ```
 
 There is no test suite. Verification is:

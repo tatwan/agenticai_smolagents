@@ -141,7 +141,7 @@ Colab install omits nothing essential; the cell installs `smolagents[toolkit,lit
 | 03 | CodeAgent vs ToolCallingAgent | Same task, two architectures | 60–75 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/03_codeagent_vs_toolcalling/notebook.ipynb) |
 | 04 | Web search & browsing | `WebSearchTool` + `VisitWebpageTool` | 75–90 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/04_web_search_and_browsing/notebook.ipynb) |
 | 05 | Multi-agent orchestration | Manager + specialists; descriptions as a routing table | 90–120 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/05_multi_agent_orchestration/notebook.ipynb) |
-| 06 | Observability | Manual MLflow logs, then `mlflow.smolagents.autolog()` | 75–90 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/06_mlflow_observability/notebook.ipynb) |
+| 06 | Observability | SQLite MLflow + `mlflow.smolagents.autolog()` (UI optional) | 75–90 min | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/tatwan/agenticai_smolagents/blob/main/06_mlflow_observability/notebook.ipynb) |
 
 Work the modules in order. Later notebooks assume you have seen `memory.steps` and a custom tool.
 
@@ -155,7 +155,7 @@ Work the modules in order. Later notebooks assume you have seen `memory.steps` a
 | Hugging Face Inference Providers | Hosted LLMs via `InferenceClientModel` | Small monthly credit, then paid |
 | Ollama + `LiteLLMModel` | Local LLMs | Free on your machine |
 | `WebSearchTool` | Web search (DuckDuckGo engine by default) | Free; rate-limited |
-| MLflow | Run tracking | Free; file store works without a server |
+| MLflow | Run tracking | Free; local SQLite works without a server |
 | uv | Package manager | Free |
 
 OpenAI / Anthropic are **optional** in Module 03 only.

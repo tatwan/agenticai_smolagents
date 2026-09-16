@@ -7,6 +7,8 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 mlruns/
+mlflow.db
+mlflow.db-*
 .mlflow/
 *.egg-info/
 .python-version
