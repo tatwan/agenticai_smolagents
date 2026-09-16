@@ -18,6 +18,18 @@ Format:
 
 ---
 
+## 2026-09-16 — Module 03 CodeAgent vs ToolCallingAgent
+
+- **Who:** coding agent (Grok 4.6)
+- **Why:** Keep the same-task comparison; refresh model/tool-calling story; drop stale OpenAI/Claude ids as gospel.
+- **Changed:** `03_codeagent_vs_toolcalling/{outline.md,instructions.md,notebook.ipynb}`, `progress/_nb_03.py`
+- **Verified:** `ollama_chat/qwen2.5-coder:3b`, task “word count then double”:
+  - CodeAgent → **18**, steps `TaskStep, ActionStep` (Python multiplied in-process)
+  - ToolCallingAgent → **18**, steps `TaskStep, ActionStep, ActionStep` (`word_count` then `final_answer`)
+- **Follow-up:** Module 04 migrate to `WebSearchTool`.
+
+---
+
 ## 2026-09-16 — Module 02 tools lesson
 
 - **Who:** coding agent (Grok 4.6)
