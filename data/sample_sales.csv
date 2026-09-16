@@ -1,0 +1,13 @@
+order_id,region,product,units,unit_price,order_date
+1001,west,widget,12,19.99,2026-01-04
+1002,east,gadget,7,49.00,2026-01-05
+1003,west,widget,3,19.99,2026-01-06
+1004,south,gizmo,15,12.50,2026-01-07
+1005,east,gadget,2,49.00,2026-01-08
+1006,north,widget,9,19.99,2026-01-09
+1007,south,widget,20,19.99,2026-01-10
+1008,west,gizmo,4,12.50,2026-01-11
+1009,north,gadget,11,49.00,2026-01-12
+1010,east,gizmo,8,12.50,2026-01-13
+1011,west,gadget,6,49.00,2026-01-14
+1012,south,widget,14,19.99,2026-01-15
